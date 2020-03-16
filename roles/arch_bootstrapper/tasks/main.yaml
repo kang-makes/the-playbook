@@ -25,7 +25,8 @@
   register: _etckeeper
 
 - name: Gather facts with extra host metadata (if last changed)
-  setup: {}
+  setup:
+    fact_path: "{% if not ansible_local.bootstrapped | default(false) %}{{root_target}}/etc/ansible/facts.d{% else %}{{ omit }}{% endif %}"
   when: _etckeeper.changed
 
 - name: Creating filesystem directories on target
@@ -36,25 +37,22 @@
   when: "item[2]"
   loop:
     - [ /etc/pacman.d, "0755", true                     ]
-    - [ /etc/zfs     , "0755", "{{ _system_uses_zfs }}" ]    
+    - [ /etc/zfs     , "0755", "{{ _system_uses_zfs }}" ]
 
 - name: Reset/create zpool cache files
   block:
   - name: Unsetting any cache file on zpools
     command: "zpool set cachefile=none {{ item }}"
     with_items: "{{ ansible_local.disk_layout | json_query(\"[?step=='zpool'].name\") }}"
-    when: (not ansible_local.bootstrapped | default(false) or force_bootstrapping or force_zfs) and _system_uses_zfs
 
   - name: Deleting old cache file
     file:
       path: /etc/zfs/zpool.cache
       state: absent
-    when: (not ansible_local.bootstrapped | default(false) or force_bootstrapping or force_zfs) and _system_uses_zfs
 
   - name: Creating new cache files
     command: "zpool set cachefile=/etc/zfs/zpool.cache {{ item }}"
     with_items: "{{ ansible_local.disk_layout | json_query(\"[?step=='zpool'].name\") }}"
-    when: (not ansible_local.bootstrapped | default(false) or force_bootstrapping or force_zfs) and _system_uses_zfs
 
   - name: Move cache file to target systems
     copy:
@@ -65,9 +63,24 @@
 
 - name: Preparing non-bootstrapped systems
   block:
+  - name: Create chroot environment
+    command:
+      warn: no
+      argv: "{{ [ 'mount', item[0], root_target+item[1], item[3] ] | flatten }}"
+    loop:
+      - [ "proc"    ,"/proc"                    , true                      , [ "-t", "proc",     "-o", "nosuid,noexec,nodev"                ] ]
+      - [ "sys"     ,"/sys"                     , true                      , [ "-t", "sysfs",    "-o", "nosuid,noexec,nodev,ro"             ] ]
+      - [ "udev"    ,"/dev"                     , true                      , [ "-t", "devtmpfs", "-o", "mode=0755,nosuid"                   ] ]
+      - [ "devpts"  ,"/dev/pts"                 , true                      , [ "-t", "devpts",   "-o", "mode=0620,gid=5,nosuid,noexec"      ] ]
+      - [ "shm"     ,"/dev/shm"                 , true                      , [ "-t", "tmpfs",    "-o", "mode=1777,nosuid,nodev"             ] ]
+      - [ "tmp"     ,"/tmp"                     , true                      , [ "-t", "tmpfs",    "-o", "mode=1777,strictatime,nodev,nosuid" ] ]
+      - [ "efivarfs","/sys/firmware/efi/efivars", "{{ _system_uses_uefi }}" , [ "-t", "efivarfs", "-o", "nosuid,noexec,nodev"                ] ]
+      - [ "/run"    ,"/run"                     , true                      , [ "--bind"                                                     ] ]
+    when: "item[2]"
+
   - name: Installing essential bootstrapping packages
     command: >
-      pacman --noconfirm --sync 
+      pacman --noconfirm --sync --refresh
       {% if not ansible_local.bootstrapped | default(false) %}
         --root="{{ root_target }}"
         --config="{{ root_target }}{{ pacman_config }}"
@@ -76,31 +89,16 @@
       {% endif %}
       pacman restic bash
 
-  - name: Create chroot environment
-    command:
-      warn: no
-      argv: "{{ [ 'mount', item[0], root_target+item[1], itemp[3] ] | flatten }}"
-    loop:
-      - [ "proc"    ,"proc"                    , true                      , [ "-t", "proc",     "-o", "nosuid,noexec,nodev"                ] ]
-      - [ "sys"     ,"sys"                     , true                      , [ "-t", "sysfs",    "-o", "nosuid,noexec,nodev,ro"             ] ]
-      - [ "udev"    ,"dev"                     , true                      , [ "-t", "devtmpfs", "-o", "mode=0755,nosuid"                   ] ]
-      - [ "devpts"  ,"dev/pts"                 , true                      , [ "-t", "devpts",   "-o", "mode=0620,gid=5,nosuid,noexec"      ] ]
-      - [ "shm"     ,"dev/shm"                 , true                      , [ "-t", "tmpfs",    "-o", "mode=1777,nosuid,nodev"             ] ]
-      - [ "tmp"     ,"tmp"                     , true                      , [ "-t", "tmpfs",    "-o", "mode=1777,strictatime,nodev,nosuid" ] ]
-      - [ "efivarfs","sys/firmware/efi/efivars", "{{ _system_uses_uefi }}" , [ "-t", "efivarfs", "-o", "nosuid,noexec,nodev"                ] ]
-      - [ "/run"    ,"run"                     , true                      , [ "--bind"                                                     ] ]
-    when: "{{ item[3] | bool }}"
   when: not ansible_local.bootstrapped | default(false)
 
-- name: Restauring restic backups before installing any software
+- name: Restoring restic backups before installing any software
   debug:
     msg: TODO
 
 - name: Precaching packages before installing
   command: >
     pacman --noconfirm --sync --downloadonly
-    {% if not ansible_local.bootstrapped | default(false) or pacman_sysupgrade %}--refresh {% endif %}
-    {% if pacman_sysupgrade %}--sysupgrade {% endif %}
+    {% if pacman_sysupgrade %}--refresh --sysupgrade {% endif %}
     {% if not ansible_local.bootstrapped | default(false) %}
       --root="{{ root_target }}"
       --config="{{ root_target }}{{ pacman_config }}"

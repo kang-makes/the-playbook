@@ -113,7 +113,7 @@
     block:
       - name: Installing ZFS using archiso package (Could fail if dependency problem)
         pacman:
-          name: 
+          name:
             - zfs-archiso-linux
             - zfs-utils
           extra_args: "--config {{ pacman_config }}"
@@ -126,13 +126,13 @@
         changed_when: false
       - name: Installing ZFS using dkms package
         pacman:
-          name: 
+          name:
             - zfs-dkms
             - zfs-utils
           extra_args: "--config {{ pacman_config }}"
         changed_when: false
     always:
-      - name: Loading ZFS module 
+      - name: Loading ZFS module
         modprobe:
           name: zfs
           state: present

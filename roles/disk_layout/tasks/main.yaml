@@ -16,14 +16,14 @@
 # fstab should be parsed and a Graph must be created for determinate precedence.
 
 - name: Ensure that boot and efs folders exists
-  file: 
+  file:
     path: "{% if not ansible_local.bootstrapped | default(false) %}{{root_target}}{% endif %}/boot/efs"
     state: directory
   when: _system_uses_uefi | bool
 
 - name: Mount EFS partition
-  command: 
-    argv: 
+  command:
+    argv:
       - mount
       - "{{ item }}"
       - "{% if not ansible_local.bootstrapped | default(false) %}{{root_target}}{% endif %}/boot/efs"

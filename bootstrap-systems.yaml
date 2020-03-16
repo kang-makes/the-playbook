@@ -3,7 +3,7 @@
   become: yes
   roles:
     - arch_live_bootstrapper
-   #- disk_layout
+    - disk_layout
     - arch_bootstrapper
 
 - name: Installing ubuntu systems
