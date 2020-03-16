@@ -1,0 +1,92 @@
+
+# I cannot do a declarative way to prepare disks like this:
+#
+# - name: Creating a partition table
+#   parted:
+#     state: present
+#   vars: "{{ disk_step }}"
+#
+# This test is commented on ansible's repository and it is still not a supported way.
+# https://github.com/ansible/ansible/blob/devel/test/integration/targets/include_import/role/test_include_role.yml#L96
+- name: Make a partition
+  parted:
+    device:     "{{ item.device     | default(omit) }}"
+    align:      "{{ item.align      | default(omit) }}"
+    number:     "{{ item.number     | default(omit) }}"
+    unit:       "{{ item.unit       | default(omit) }}"
+    label:      "{{ item.label      | default(omit) }}"
+    part_type:  "{{ item.part_type  | default(omit) }}"
+    part_start: "{{ item.part_start | default(omit) }}"
+    part_end :  "{{ item.part_end   | default(omit) }}"
+    name:       "{{ item.name       | default(omit) }}"
+    flags:      "{{ item.flags      | default(omit) }}"
+    state:      "{{ item.state      | default(omit) }}"
+  check_mode: "{{ ansible_check_mode or ansible_local.bootstrapped | default(false) or ansible_check_mode and force_bootstrapping }}"
+  register: _parted
+  when: item.step == "parted"
+
+# Not needed for now
+# *TODO*
+- name: Crypt the partition or volume
+  fail:
+    msg: This step type is still not supported
+  check_mode: "{{ ansible_check_mode or ansible_local.bootstrapped | default(false) or ansible_check_mode and force_bootstrapping }}"
+  register: _crypt
+  when: item.step == "crypt"
+
+# I cannot do a declarative way to prepare disks like this:
+#
+# - name: Creating a partition table
+#   parted:
+#     state: present
+#   vars: "{{ disk_step }}"
+#
+# This test is commented on ansible's repository and it is still not a supported way.
+# https://github.com/ansible/ansible/blob/devel/test/integration/targets/include_import/role/test_include_role.yml#L96
+- name: Formatting the partition or volume
+  filesystem:
+    dev:      "{{ item.device   | default(item.dev) | default(omit) }}"
+    force:    "{{ item.force                        | default(omit) }}"
+    fstype:   "{{ item.fstype                       | default(omit) }}"
+    opts:     "{{ item.opts                         | default(omit) }}"
+    resizefs: "{{ item.resizefs                     | default(omit) }}"
+  check_mode: "{{ ansible_check_mode or ansible_local.bootstrapped | default(false) or ansible_check_mode and force_bootstrapping }}"
+  register: _format
+  when: item.step == "format"
+
+# zpool module is not mrge not programmed on a mantenible and "ansible" way. Also has things bad coded.
+# As I need this functionality as soon as possible I'm using the zpool binary
+# *TODO*
+- name: Creating zpools
+  command: >
+    zpool create
+    {% if 'extra_zpool_properties' in item %}{% for opt in item.extra_zpool_properties | default({}) %}-o {{opt}}={{ item.extra_zpool_properties[opt] }} {% endfor %}{% endif %}
+    {% if 'extra_zfs_properties'   in item %}{% for opt in item.extra_zfs_properties   | default({}) %}-O {{opt}}={{ item.extra_zfs_properties[opt] }} {%   endfor %}{% endif %}
+    -R {{ root_target }} {% if force_zfs %}-f {% endif %}{{ item.name | default('rpool') }} {{ item.devices | join(' ') }}
+  check_mode: "{{ ansible_check_mode or ansible_local.bootstrapped | default(false) or ansible_check_mode and force_bootstrapping }}"
+  register: _zpool
+  when: item.step == "zpool"
+
+# I cannot do a declarative way to prepare disks like this:
+#
+# - name: Creating a partition table
+#   parted:
+#     state: present
+#   vars: "{{ disk_step }}"
+#
+# This test is commented on ansible's repository and it is still not a supported way.
+# https://github.com/ansible/ansible/blob/devel/test/integration/targets/include_import/role/test_include_role.yml#L96
+- name: Create zfs datasets/volumes
+  zfs:
+    name:                 "{{ item.name                 | default(omit) }}"
+    state:                "{{ item.state                | default('present') }}"
+    origin:               "{{ item.origin               | default(omit) }}"
+    extra_zfs_properties: "{{ item.extra_zfs_properties | default({}) }}"
+
+  check_mode: "{{ ansible_check_mode or ansible_local.bootstrapped | default(false) or ansible_check_mode and force_bootstrapping }}"
+  register: _zfs
+  when: item.step == "zfs"
+
+- name: Saving changed state
+  set_fact:
+    disk_layout_changed: "{{ disk_layout_changed | default(false) or _parted.changed or _crypt.changed or _format.changed or _zpool.changed or _zfs.changed }}"

@@ -1,0 +1,98 @@
+- name: Create temporary folder for configurations
+  tempfile:
+    state: directory
+  register: bootstrap_temp_directory
+
+- name: Downloading Archlinux iPXE script.
+  uri:
+    url: https://www.archlinux.org/releng/netboot/archlinux.ipxe
+    return_content: yes
+  register: arch_ipxe
+  failed_when: "'set release' not in arch_ipxe.content"
+
+
+- name: Setting variables for needed directories and files
+  set_fact:
+    temp: "{{ temp_directory }}"
+    pacman_conf_live: "{{ temp_directory }}/root.x86_64/etc/pacman.conf"
+    pacman_conf_live_vars: "{{ pacman_conf | combine({ 'IgnorePkg': 'linux','RootDir': temp_directory + '/root.x86_64','repositories': [{ 'name': 'archzfs','lines': ['Server = http://archzfs.com/$repo/$arch']}]})}}"
+    pacman_conf_target: "{{ temp_directory }}/root.x86_64/etc/pacman-target.conf"
+    pacman_conf_target_vars: "{{ pacman_conf | combine({'RootDir': temp_directory + '/root.x86_64/target'}, pacman_extra_host.conf) }}"
+    arch_root_target: "{{ temp_directory }}/root.x86_64/target"
+    arch_chroot_live: "{{ temp_directory }}/root.x86_64/usr/bin/arch-chroot {{ temp_directory }}/root.x86_64"
+    arch_chroot_target: "{{ temp_directory }}/root.x86_64/usr/bin/arch-chroot {{ temp_directory }}/root.x86_64/target"
+  vars:
+    temp_directory: "{{ bootstrap_temp_directory.path }}"
+ 
+- name: Mounting tmpfs on temporary folder
+  command:
+    argv: [ mount, tmpfs, "{{ temp }}", -t, tmpfs, -o, size=4G ]
+    warn: False
+
+
+- name: "Getting archlinux bootstrap image"
+  vars:
+    arch_release: "{{ arch_ipxe.content | regex_search('^set release .*$', multiline=True) | regex_replace('^set release (.*)$', '\\1')  }}"
+  get_url:
+    url: "http://mirror.rackspace.com/archlinux/iso/latest/archlinux-bootstrap-{{ arch_release }}-x86_64.tar.gz"
+    dest: "{{ temp }}/arch-bootstrap-image.tar.xz"
+
+- name: Unarchiving bootstrap Archlinux image
+  unarchive:
+    src: "{{ temp }}/arch-bootstrap-image.tar.xz"
+    remote_src: yes
+    dest: "{{ temp }}"
+
+- name: Patching old version of zfsutils
+  file:
+    src: /bin/rm
+    dest: /usr/bin/rm
+    state: link
+
+- name: Templating Debian repos
+  template:
+    src: templates/bootstrap/debian_sources.list.j2
+    dest: /etc/apt/sources.list
+
+# Configuration to use on live environment
+- name: Templating pacman configuration on live environment
+  template:
+    src: templates/bootstrap/pacman.conf.j2
+    dest: "{{ pacman_conf_live }}"
+  vars:
+    pacman: "{{ pacman_conf_live_vars }}"
+# Configuration to install target environment
+- name: Templating pacman configuration on live environment
+  template:
+    src: templates/bootstrap/pacman.conf.j2
+    dest: "{{ pacman_conf_target }}"
+  vars:
+    pacman: "{{ pacman_conf_target_vars }}"
+
+# (Initializaing and) Addind to pacman keychain the archzfs' keys
+- name: "Initializing pacman-key"
+  command: "{{ arch_chroot_live }} pacman-key --init"
+- name: "Populating pacman-key"
+  command: "{{ arch_chroot_live }} pacman-key --populate archlinux"
+- name: "Adding archzfs key"
+  command: "{{ arch_chroot_live }} pacman-key -r F75D9D76"
+  retries: 10
+  delay: 10
+  register: result
+  until: result.rc == 0
+- name: "Locally signing archzfs repo key"
+  command: "{{ arch_chroot_live }} pacman-key --lsign-key F75D9D76"
+
+- name: "Installing all dependencies"
+  apt: 
+    install_recommends: no
+    update_cache: yes
+    name:
+      - "linux-headers-{{ ansible_kernel }}"
+      - zfs-dkms
+      - zfsutils-linux
+      - debootstrap
+      - parted
+ 
+- name: "Loagind ZFS module"
+  command: modprobe zfs

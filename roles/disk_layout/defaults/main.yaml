@@ -1,0 +1,4 @@
+---
+root_target: /target
+force_bootstrapping: false
+force_zfs: false

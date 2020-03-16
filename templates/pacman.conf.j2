@@ -1,0 +1,33 @@
+[options]
+{%            if pacman.RootDir      is defined %}RootDir             = {{ pacman.RootDir }}
+{% endif %}{% if pacman.DBPath       is defined %}DBPath              = {{ pacman.DBPath }}
+{% endif %}{% if pacman.CacheDir     is defined %}CacheDir            = {{ pacman.CacheDir }}
+{% endif %}{% if pacman.LogFile      is defined %}LogFile             = {{ pacman.LogFile }}
+{% endif %}{% if pacman.GPGDir       is defined %}GPGDir              = {{ pacman.GPGDir }}
+{% endif %}{% if pacman.HookDir      is defined %}HookDir             = {{ pacman.HookDir }}
+{% endif %}{% if pacman.HoldPkg      is defined %}HoldPkg             = {{ pacman.HoldPkg }}
+{% endif %}{% if pacman.XferCommand  is defined %}XferCommand         = {{ pacman.XferCommand }}
+{% endif %}{% if pacman.XferCommand  is defined %}XferCommand         = {{ pacman.XferCommand }}
+{% endif %}{% if pacman.CleanMethod  is defined %}CleanMethod         = {{ pacman.CleanMethod }}
+{% endif %}{% if pacman.UseDelta     is defined %}UseDelta            = {{ pacman.UseDelta }}
+{% endif %}{% if pacman.Architecture is defined %}Architecture        = {{ pacman.Architecture }}
+{% endif %}
+{%            if pacman.IgnorePkg    is defined %}IgnorePkg           = {{ pacman.IgnorePkg }}
+{% endif %}{% if pacman.IgnoreGroup  is defined %}IgnoreGroup         = {{ pacman.IgnoreGroup }}
+{% endif %}
+{%            if pacman.NoUpgrade    is defined %}NoUpgrade           = {{ pacman.NoUpgrade }}
+{% endif %}{% if pacman.NoExtract    is defined %}NoExtract           = {{ pacman.NoExtract }}
+{% endif %}
+{%            if 'SigLevel'           in pacman %}SigLevel            = {{ pacman.SigLevel }}
+{% endif %}{% if 'LocalFileSigLevel'  in pacman %}LocalFileSigLevel   = {{ pacman.LocalFileSigLevel }}
+{% endif %}{% if 'RemoteFileSigLevel' in pacman %}RemoteFileSigLevel  = {{ pacman.RemoteFileSigLevel }}
+{% endif %}
+{% if not pacman.UseSyslog       %}#{% endif %}UseSyslog
+{% if not pacman.Color           %}#{% endif %}Color
+{% if not pacman.TotalDownload   %}#{% endif %}TotalDownload
+{% if not pacman.CheckSpace      %}#{% endif %}CheckSpace
+{% if not pacman.VerbosePkgLists %}#{% endif %}VerbosePkgLists
+
+{% for repo in pacman.repositories %}
+{{ repo.definition }}
+{% endfor %}

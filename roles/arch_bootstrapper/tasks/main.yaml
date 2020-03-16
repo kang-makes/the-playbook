@@ -1,0 +1,141 @@
+---
+- name: Creating filesystem directories on target
+  file:
+    path: "{% if not ansible_local.bootstrapped | default(false) %}{{root_target}}{% endif %}{{ item[0] }}"
+    mode: "{{ item[1] }}"
+    state: directory
+  when: "item[2]"
+  loop:
+    - [ /var/cache/pacman/pkg, "0755", true ]
+    - [ /var/lib/pacman      , "0755", true ]
+    - [ /var/log             , "0755", true ]
+    - [ /dev                 , "0755", true ]
+    - [ /run                 , "0755", true ]
+    - [ /etc                 , "0755", true ]
+    - [ /tmp                 , "1777", true ]
+    - [ /sys                 , "0555", true ]
+    - [ /proc                , "0555", true ]
+
+- name: Downloading host's metadata
+  git:
+    repo: "{{ metadata_repo }}/homd-{{ inventory_hostname_short }}"
+    dest: "{% if not ansible_local.bootstrapped | default(false) %}{{root_target}}{% endif %}/etc"
+    accept_hostkey: yes
+    version: "{{ etckeeper_branch | default ('etckeeper')}}"
+  register: _etckeeper
+
+- name: Gather facts with extra host metadata (if last changed)
+  setup: {}
+  when: _etckeeper.changed
+
+- name: Creating filesystem directories on target
+  file:
+    path: "{% if not ansible_local.bootstrapped | default(false) %}{{root_target}}{% endif %}{{ item[0] }}"
+    mode: "{{ item[1] }}"
+    state: directory
+  when: "item[2]"
+  loop:
+    - [ /etc/pacman.d, "0755", true                     ]
+    - [ /etc/zfs     , "0755", "{{ _system_uses_zfs }}" ]    
+
+- name: Reset/create zpool cache files
+  block:
+  - name: Unsetting any cache file on zpools
+    command: "zpool set cachefile=none {{ item }}"
+    with_items: "{{ ansible_local.disk_layout | json_query(\"[?step=='zpool'].name\") }}"
+    when: (not ansible_local.bootstrapped | default(false) or force_bootstrapping or force_zfs) and _system_uses_zfs
+
+  - name: Deleting old cache file
+    file:
+      path: /etc/zfs/zpool.cache
+      state: absent
+    when: (not ansible_local.bootstrapped | default(false) or force_bootstrapping or force_zfs) and _system_uses_zfs
+
+  - name: Creating new cache files
+    command: "zpool set cachefile=/etc/zfs/zpool.cache {{ item }}"
+    with_items: "{{ ansible_local.disk_layout | json_query(\"[?step=='zpool'].name\") }}"
+    when: (not ansible_local.bootstrapped | default(false) or force_bootstrapping or force_zfs) and _system_uses_zfs
+
+  - name: Move cache file to target systems
+    copy:
+      src: /etc/zfs/zpool.cache
+      dest: "{{root_target}}/etc/zfs/zpool.cache"
+      remote_src: yes
+  when: (not ansible_local.bootstrapped | default(false) or force_bootstrapping or force_zfs) and _system_uses_zfs
+
+- name: Preparing non-bootstrapped systems
+  block:
+  - name: Installing essential bootstrapping packages
+    command: >
+      pacman --noconfirm --sync 
+      {% if not ansible_local.bootstrapped | default(false) %}
+        --root="{{ root_target }}"
+        --config="{{ root_target }}{{ pacman_config }}"
+        --cachedir="{{ root_target }}/var/cache/pacman/pkg"
+        --gpgdir="/etc/pacman.d/gnupg"
+      {% endif %}
+      pacman restic bash
+
+  - name: Create chroot environment
+    command:
+      warn: no
+      argv: "{{ [ 'mount', item[0], root_target+item[1], itemp[3] ] | flatten }}"
+    loop:
+      - [ "proc"    ,"proc"                    , true                      , [ "-t", "proc",     "-o", "nosuid,noexec,nodev"                ] ]
+      - [ "sys"     ,"sys"                     , true                      , [ "-t", "sysfs",    "-o", "nosuid,noexec,nodev,ro"             ] ]
+      - [ "udev"    ,"dev"                     , true                      , [ "-t", "devtmpfs", "-o", "mode=0755,nosuid"                   ] ]
+      - [ "devpts"  ,"dev/pts"                 , true                      , [ "-t", "devpts",   "-o", "mode=0620,gid=5,nosuid,noexec"      ] ]
+      - [ "shm"     ,"dev/shm"                 , true                      , [ "-t", "tmpfs",    "-o", "mode=1777,nosuid,nodev"             ] ]
+      - [ "tmp"     ,"tmp"                     , true                      , [ "-t", "tmpfs",    "-o", "mode=1777,strictatime,nodev,nosuid" ] ]
+      - [ "efivarfs","sys/firmware/efi/efivars", "{{ _system_uses_uefi }}" , [ "-t", "efivarfs", "-o", "nosuid,noexec,nodev"                ] ]
+      - [ "/run"    ,"run"                     , true                      , [ "--bind"                                                     ] ]
+    when: "{{ item[3] | bool }}"
+  when: not ansible_local.bootstrapped | default(false)
+
+- name: Restauring restic backups before installing any software
+  debug:
+    msg: TODO
+
+- name: Precaching packages before installing
+  command: >
+    pacman --noconfirm --sync --downloadonly
+    {% if not ansible_local.bootstrapped | default(false) or pacman_sysupgrade %}--refresh {% endif %}
+    {% if pacman_sysupgrade %}--sysupgrade {% endif %}
+    {% if not ansible_local.bootstrapped | default(false) %}
+      --root="{{ root_target }}"
+      --config="{{ root_target }}{{ pacman_config }}"
+      --cachedir="{{ root_target }}/var/cache/pacman/pkg"
+    {% endif %}
+    {{ item[0] | default([]) | flatten | join(" ") }}
+  ignore_errors: "{{ item[1] }}"
+  loop:
+    - [ "{{ansible_local.pacman.explicit}}"            , false  ]
+    - [ "{{ansible_local.pacman.dependencies}}"        , false  ]
+    - [ "{{ansible_local.pacman.foreign.explicit}}"    , true ]
+    - [ "{{ansible_local.pacman.foreign.dependencies}}", true ]
+
+- name: Installing packages marked as explicit
+  command: >
+    pacman --noconfirm --sync --asexplicit
+    {% if not ansible_local.bootstrapped | default(false) %}--sysroot {{ root_target }}{% endif %}
+    {{ ansible_local.pacman.explicit | join(" ") }}
+
+- name: Installing packages marked as dependencies
+  command: >
+    pacman --noconfirm --sync --asdeps
+    {% if not ansible_local.bootstrapped | default(false) %}--sysroot {{ root_target }}{% endif %}
+    {{ ansible_local.pacman.dependencies | join(" ") }}
+
+- name: Installing foreign packages marked as explicit (Could fail. Take a look after installing)
+  command: >
+    pacman --noconfirm --sync --asexplicit
+    {% if not ansible_local.bootstrapped | default(false) %}--sysroot {{ root_target }}{% endif %}
+    {{ ansible_local.pacman.foreign.explicit | join(" ") }}
+  ignore_errors: yes
+
+- name: Installing foreign packages marked as dependencies (Could fail. Take a look after installing)
+  command: >
+    pacman --noconfirm --sync --asdeps
+    {% if not ansible_local.bootstrapped | default(false) %}--sysroot {{ root_target }}{% endif %}
+    {{ ansible_local.pacman.foreign.dependencies | join(" ") }}
+  ignore_errors: yes

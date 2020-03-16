@@ -1,0 +1,15 @@
+- name: Installing arch systems
+  hosts: archlinux
+  become: yes
+  roles:
+    - arch_live_bootstrapper
+   #- disk_layout
+    - arch_bootstrapper
+
+- name: Installing ubuntu systems
+  hosts: ubuntu
+  become: yes
+  roles:
+    - ubuntu_live_bootstrapper
+    - disk_layout
+    - ubuntu_bootstrapper
