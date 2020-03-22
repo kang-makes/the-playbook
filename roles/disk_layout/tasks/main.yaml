@@ -9,24 +9,3 @@
     fail_msg: "This role run in check mode and expected no changes"
     success_msg: "Facts' layout matches host's layout"
   when: ansible_local.bootstrapped | default(false) and not ansible_check_mode
-
-# *TODO*
-# Mount patitions created before. I do not need it for now because I only use ZFS
-# But there is case when root is in a partition and a zpool is use for other things.
-# fstab should be parsed and a Graph must be created for determinate precedence.
-
-- name: Ensure that boot and efs folders exists
-  file:
-    path: "{% if not ansible_local.bootstrapped | default(false) %}{{root_target}}{% endif %}/boot/efs"
-    state: directory
-  when: _system_uses_uefi | bool
-
-- name: Mount EFS partition
-  command:
-    argv:
-      - mount
-      - "{{ item }}"
-      - "{% if not ansible_local.bootstrapped | default(false) %}{{root_target}}{% endif %}/boot/efs"
-    warn: off
-  with_items: "{{ ansible_local.disk_layout | json_query(\"[?efi==true].name\")}}"
-  when: _system_uses_uefi | bool

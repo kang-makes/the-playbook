@@ -56,7 +56,7 @@
       update_cache: yes
       update_cache_extra_args: "--config {{ pacman_config }} --refresh --refresh"
       upgrade: yes
-      upgrade_extra_args: "--config {{ pacman_config }} --ignore linux,linux-headers"
+      upgrade_extra_args: "--config {{ pacman_config }} --ignore linux"
     changed_when: false
 
   - name: Cleaning pacman cache
@@ -68,6 +68,7 @@
       name:
         - parted
         - git
+        - restic
       extra_args: "--config {{ pacman_config }}"
     changed_when: false
 
@@ -92,14 +93,14 @@
     changed_when: false
   when: not ansible_local.bootstrapped | default(false)
 
-- name: Setting if system variables
+- name: Setting system variables
   set_fact:
     _system_uses_zfs: >
       {{ 'zfs'   in (ansible_local.disk_layout | json_query('[*].step') | default ([])) or
          'zpool' in (ansible_local.disk_layout | json_query('[*].step') | default ([]))    }}
-    _system_uses_uefi: _uefi.stat.exists
+    _system_uses_uefi: "{{ _uefi.stat.exists }}"
 
-- name: Prepare live CD for systems tht uses ZFS
+- name: Prepare live CD for systems that uses ZFS
   block:
   - name: Loading ZFS module (Could fail if no zfs module is available)
     modprobe:
@@ -131,13 +132,13 @@
             - zfs-utils
           extra_args: "--config {{ pacman_config }}"
         changed_when: false
-    always:
-      - name: Loading ZFS module
-        modprobe:
-          name: zfs
-          state: present
-        changed_when: false
-        register: _zfs
-        failed_when: _zfs.state != "present"
     when: _zfs.state != "present" or _zfs.failed
+
+  - name: Loading ZFS module
+    modprobe:
+      name: zfs
+      state: present
+    changed_when: false
+    register: _zfs
+    failed_when: _zfs.state != "present" or _zfs.failed
   when: not ansible_local.bootstrapped | default(false) and _system_uses_zfs

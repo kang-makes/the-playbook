@@ -1,0 +1,20 @@
+- name: Info about foreign packages (skipped if there is no foreign packages)
+  debug:
+    msg:
+    - It might be foreign packages installed on {{ inventory_hostname_short }}.
+    - You have to install/update those packages by hand.
+    - ""
+    - |
+      {% if ansible_local.pacman.foreign.explicit | length == 0 %}
+      The list of foreign explitly installed is empty
+      {% else %}
+      List of foreign explitly installed is:
+      {{ ansible_local.pacman.foreign.explicit[:-2] | join(', ')}} and {{ ansible_local.pacman.foreign.explicit[:-1] }}
+    - ""
+    - |
+      {% if ansible_local.pacman.foreign.dependencies | length == 0 %}
+      The list of foreign installed as dependency is empty
+      {% else %}
+      List of foreign installed as dependency is:
+      {{ ansible_local.pacman.foreign.dependencies[:-2] | join(', ')}} and {{ ansible_local.pacman.foreign.dependencies[:-1] }}
+  when: ansible_local.pacman.foreign.explicit | length > 0 or ansible_local.pacman.foreign.dependencies | length > 0

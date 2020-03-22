@@ -1,6 +1,12 @@
 - name: Installing arch systems
   hosts: archlinux
   become: yes
+  vars_prompt:
+    - name: restic_password
+      prompt: "Write your restic backup password"
+      private: yes
+      unsafe: yes
+
   roles:
     - arch_live_bootstrapper
     - disk_layout
