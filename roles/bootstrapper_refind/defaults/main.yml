@@ -1,0 +1,5 @@
+---
+root_target: /target
+
+package_name:
+  archlinux: refind-efi

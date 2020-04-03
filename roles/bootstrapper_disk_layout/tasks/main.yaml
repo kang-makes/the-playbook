@@ -1,0 +1,68 @@
+---
+
+# I cannot do a declarative way to prepare disks like this:
+#
+# - name: Creating a partition table
+#   parted:
+#     state: present
+#   vars: "{{ disk_step }}"
+#
+# This test is commented on ansible's repository and it is still not a supported way.
+# https://github.com/ansible/ansible/blob/devel/test/integration/targets/include_import/role/test_include_role.yml#L96
+
+- name: Building disk layout
+  include_tasks: "disk_creator.yaml"
+  loop: "{{ ansible_local.disk_layout }}"
+
+- name: Fail if bootstrapped and changes have been made
+  assert:
+    that: "disk_layout_changed == false"
+    fail_msg: "This role run in check mode and expected no changes"
+    success_msg: "Facts' layout matches host's layout"
+  when: ansible_local.bootstrapped | default(false) and not ansible_check_mode
+
+# - name: This ends in changed
+#   action: "parted device=\"/dev/disk/by-path/pci-0000:09:00.0-nvme-1\" flags=\"boot\" label=\"gpt\" name=\"boot\" number=\"1\" part_end=\"100MiB\" state=\"present\""
+# # TASK [disk_layout : parted] *******************************************************************************************************
+# # changed: [stray-dog.h.kang]                                                                                                        
+
+# - name: This ends in ok
+#   set_fact:
+#     test: "parted device=\"/dev/disk/by-path/pci-0000:09:00.0-nvme-1\" flags=\"boot\" label=\"gpt\" name=\"boot\" number=\"1\" part_end=\"100MiB\" state=\"present\""
+# # TASK [disk_layout : set_fact] *****************************************************************************************************
+# # ok: [stray-dog.h.kang]                                                                                                             
+
+# - name: This fails
+#   action: '{{test}}'
+# # TASK [disk_layout : {{test}}] *****************************************************************************************************
+# # fatal: [stray-dog.h.kang]: FAILED! => {"msg": "The module parted device=\"/dev/disk/by-path/pci-0000:09:00.0-nvme-1\" flags=\"boot\
+# # " label=\"gpt\" name=\"boot\" number=\"1\" part_end=\"100MiB\" state=\"present\" was not found in configured module paths."} 
+
+
+
+# - name: Create new layout
+#   set_fact:
+#     result: "{{ result | default([]) + [ [ step, options ] | join (' ') ] }}"
+#   vars:
+#     step: "{{ item.step }}"
+#     options: "{% for key in item %}{% if key not in ('comment', 'step') %}{{ key }}=\"{{ item[key] }}\" {% endif %}{% endfor %}"
+#     dict2: "{{dict2 |combine({item.key: item.value})}}"
+#   loop: "{{ ansible_local.disk_layout }}"
+# 
+# - name: print result
+#   debug:
+#     var: item
+#   loop: "{{result}}"
+# 
+# - name: run result
+#   action: "{{item}}"
+#   loop: "{{result}}"
+
+
+# This works, but need for changes in the facts JSON.
+# - name: run result
+#   action: "{{item.step}}"
+#   args: "{{item.args}}"
+#   loop: "{{ ansible_local.disk_layout }}"
+#   when: item.step in ("parted", "crypt", "format", "zpool", "zfs")
+

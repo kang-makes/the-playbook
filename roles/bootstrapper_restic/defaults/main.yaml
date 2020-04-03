@@ -1,0 +1,7 @@
+---
+root_target: /target
+
+homd_prefix: homd
+
+force_restic: false
+restic_hostname: "{{ inventory_hostname_short }}"

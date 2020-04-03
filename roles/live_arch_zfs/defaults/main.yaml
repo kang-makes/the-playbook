@@ -1,0 +1,10 @@
+---
+arch_package_extension: ".pkg.tar.zst"
+pacman_config: /etc/pacman.conf
+
+pacman_repositories:
+  - definition: |
+      [archzfs]
+      Server = http://archzfs.com/$repo/$arch
+    keys:
+      - F75D9D76

@@ -1,0 +1,41 @@
+---
+- name: Check if discovered distribution match with the inventory
+  assert:
+    that: '"archlinux" in group_names'
+    fail_msg: "Expected to archlinux to be in those groups: {{ group_names | join(' ') }}"
+    success_msg: "Distribution exists on host's groups"
+
+- name: Updating arch linux live CD with the latest packages except Kernel
+  block:
+  - name: Remounting cowspace so can install needed packages
+    ignore_errors: yes
+    command:
+      argv: [ mount, /run/archiso/cowspace, -o, size=4G, -o, remount ]
+      warn: False
+    changed_when: false
+
+  - name: Syncing time
+    command: timedatectl set-ntp true
+    changed_when: False
+
+  - name: Refreshing package cache and updating live environment
+    pacman:
+      update_cache: yes
+      update_cache_extra_args: "--config {{ pacman_config }} --refresh --refresh"
+      upgrade: yes
+      upgrade_extra_args: "--config {{ pacman_config }} --ignore linux"
+    changed_when: false
+
+  - name: Cleaning pacman cache
+    command: "pacman -Scc --noconfirm"
+    changed_when: false
+
+  - name: Installing dependencies
+    pacman:
+      name:
+        - parted
+        - git
+        - restic
+      extra_args: "--config {{ pacman_config }}"
+    changed_when: false
+  when: not ansible_local.bootstrapped | default(false)

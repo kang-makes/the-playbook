@@ -1,0 +1,48 @@
+---
+- name: Check if discovered distribution match with the inventory
+  assert:
+    that: "( ansible_distribution | lower ) in group_names"
+    fail_msg: "Expected to {{ansible_distribution|lower}} to be in those groups: {{ group_names | join(' ') }}"
+    success_msg: "Distribution exists on host's groups"
+
+- name: Get facts for not bootstrapped hosts
+  block:
+  - name: Creating temporary folder to download the host's metadata repo
+    tempfile:
+      state: directory
+    check_mode: no
+    changed_when: no
+    register: facts_temp
+
+  - name: Downloading host's metadata
+    git:
+      repo: "{{ metadata_repo }}/{{ homd_prefix }}-{{ inventory_hostname_short }}"
+      dest: "{{ facts_temp.path }}"
+      accept_hostkey: yes
+      version: "{{ etckeeper_branch | default ('etckeeper')}}"
+    ignore_errors: yes
+    changed_when: false
+
+  - name: Gather facts with extra host metadata
+    setup:
+      fact_path: "{{ facts_temp.path }}/ansible/facts.d"
+
+  - name: Cleaning temporary metadata repo
+    file:
+      path: "{{ facts_temp.path }}"
+      state: absent
+    check_mode: no
+    changed_when: false
+
+  - name: Check if this is an UEFI system
+    stat:
+      path: /sys/firmware/efi/efivars
+    register: _uefi
+
+  - name: Setting system variables
+    set_fact:
+      system_uses_zfs: >
+        {{ 'zfs'   in (ansible_local.disk_layout | json_query('[*].step') | default ([])) or
+           'zpool' in (ansible_local.disk_layout | json_query('[*].step') | default ([]))    }}
+      system_uses_uefi: "{{ _uefi.stat.exists }}"
+  when: not ansible_local.bootstrapped | default(false)

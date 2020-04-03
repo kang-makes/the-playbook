@@ -1,0 +1,35 @@
+---
+- name: Check if discovered distribution match with the inventory
+  assert:
+    that: '"archlinux" in group_names'
+    fail_msg: "Expected to {{ansible_distribution|lower}} to be in those groups: {{ group_names | join(' ') }}"
+    success_msg: "Distribution exists on host's groups"
+
+- name: Reset/create zpool cache files
+  block:
+  - name: Unsetting any cache file on zpools
+    command: "zpool set cachefile=none {{ item }}"
+    with_items: "{{ ansible_local.disk_layout | json_query(\"[?step=='zpool'].name\") }}"
+
+  - name: Deleting old cache file
+    file:
+      path: /etc/zfs/zpool.cache
+      state: absent
+
+  - name: Creating zfs cache directory
+    file:
+      path: "{% if not ansible_local.bootstrapped | default(false) %}{{root_target}}{% endif %}/etc/zfs"
+      mode: "0775"
+      state: directory
+
+  - name: Creating new cache files
+    command: "zpool set cachefile=/etc/zfs/zpool.cache {{ item }}"
+    with_items: "{{ ansible_local.disk_layout | json_query(\"[?step=='zpool'].name\") }}"
+
+  - name: Move cache file to target systems
+    copy:
+      src: /etc/zfs/zpool.cache
+      dest: "{{root_target}}/etc/zfs/zpool.cache"
+      remote_src: yes
+    when: not ansible_local.bootstrapped | default(false)
+  when: (not ansible_local.bootstrapped | default(false) or force_bootstrapping or force_zfs) and system_uses_zfs
