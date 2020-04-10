@@ -11,28 +11,13 @@
     - live_arch
     - live_host_extra_facts
     - live_arch_zfs
-    - bootstrapper_disk_layout
+    #- bootstrapper_disk_layout
     - bootstrapper_restic
     - bootstrapper_arch
     - bootstrapper_arch_zfs
     - bootstrapper_refind
 
   pre_tasks:
-    - name: Delete from know hosts
-      delegate_to: localhost
-      become: false
-      lineinfile:
-        dest: /home/kang/.ssh/known-hosts--general
-        state: absent
-        regexp: '^stray-dog.h.kang,192.168.0.'
-    - name: Create ssh folder
-      file:
-        state: directory
-        path: /root/.ssh
-    - name: Copy de ssh public key
-      copy:
-        src: /home/kang/.ssh/rsa-pub--sysadmin-key
-        dest: /root/.ssh/authorized_keys
     - name: Kill all gpg agents so target could be unmounted
       ignore_errors: yes
       command: pkill -2 gpg-agent
@@ -59,34 +44,19 @@
           - "{{ item.path }}"
       when: item.fstype != "zfs"
       loop: "{{ mounted[::-1] | default ([])}}"
-    - name: destroy zpool
-      ignore_errors: yes
-      command: zpool destroy hot
-    - name: Wipe al partition signatures
-      ignore_errors: yes
-      shell: "wipefs -a /dev/nvme?n1p?"
-    - name: wipe all disk signature
-      ignore_errors: yes
-      shell: "wipefs -a /dev/nvme?n1"
-    - name: Destroy everything on target folder (should be empty)
-      shell:
-        cmd: rm -rf /target
-        warn: no
-    - name: Remount cowspace
-      ignore_errors: yes
-      command:
-        argv: [ mount, /run/archiso/cowspace, -o, size=4G, -o, remount ]
-        warn: False
-      changed_when: false
-    - name: Copy a non breaking mirrorlist
-      copy:
-        src: make-fast-again/mirrorlist
-        dest: /etc/pacman.d/mirrorlist
-    - name: copy precached packages
-      synchronize:
-        src: make-fast-again/packages/
-        dest: /var/cache/pacman/pkg/
-
+#    - name: destroy zpool
+#      ignore_errors: yes
+#      command: zpool destroy hot
+#    - name: Wipe al partition signatures
+#      ignore_errors: yes
+#      shell: "wipefs -a /dev/nvme?n1p?"
+#    - name: wipe all disk signature
+#      ignore_errors: yes
+#      shell: "wipefs -a /dev/nvme?n1"
+#    - name: Destroy everything on target folder (should be empty)
+#      shell:
+#        cmd: rm -rf /target
+#        warn: no
 
 # - name: Installing ubuntu systems
 #   hosts: ubuntu

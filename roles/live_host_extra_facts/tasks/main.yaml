@@ -33,16 +33,16 @@
       state: absent
     check_mode: no
     changed_when: false
-
-  - name: Check if this is an UEFI system
-    stat:
-      path: /sys/firmware/efi/efivars
-    register: _uefi
-
-  - name: Setting system variables
-    set_fact:
-      system_uses_zfs: >
-        {{ 'zfs'   in (ansible_local.disk_layout | json_query('[*].step') | default ([])) or
-           'zpool' in (ansible_local.disk_layout | json_query('[*].step') | default ([]))    }}
-      system_uses_uefi: "{{ _uefi.stat.exists }}"
   when: not ansible_local.bootstrapped | default(false)
+
+- name: Check if this is an UEFI system
+  stat:
+    path: /sys/firmware/efi/efivars
+  register: _uefi
+
+- name: Setting system variables
+  set_fact:
+    system_uses_zfs: >
+      {{ 'zfs'   in (ansible_local.disk_layout | json_query('[*].step') | default ([])) or
+          'zpool' in (ansible_local.disk_layout | json_query('[*].step') | default ([]))    }}
+    system_uses_uefi: "{{ _uefi.stat.exists }}"
