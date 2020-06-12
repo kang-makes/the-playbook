@@ -1,0 +1,24 @@
+all:
+  hosts:
+    a-host:
+    other-host:
+
+  vars:
+    metadata_repo: "https://github"
+
+  children:
+    servers:
+      hosts:
+        a-host:
+
+    personal:
+      hosts:
+        other-host:
+
+    ubuntu:
+      hosts:
+        a-host:
+
+    archlinux:
+      hosts:
+        other-host:

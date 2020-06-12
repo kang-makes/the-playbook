@@ -1,8 +1,0 @@
----
-root_target: /target
-force_bootstrapping: false
-
-pacman_sysupgrade: true
-pacman_config: /etc/pacman.conf
-
-snippets: /etc/ansible/snippets

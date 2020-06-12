@@ -2,61 +2,39 @@
   hosts: archlinux
   become: yes
   vars_prompt:
-    - name: restic_password
-      prompt: "Write your restic backup password"
+    - name: root_password
+      prompt: "New system root password"
       private: yes
       unsafe: yes
-
+    - name: restic_password
+      prompt: "System restic password"
+      private: yes
+      unsafe: yes
+    - name: user_to_restore
+      prompt: "New system user"
+      private: no
+      unsafe: yes
+    - name: user_password
+      prompt: "User password"
+      private: yes
+      unsafe: yes
+    - name: user_restic_password
+      prompt: "User restic password"
+      private: yes
+      unsafe: yes
   roles:
     - live_arch
     - live_host_extra_facts
     - live_arch_zfs
-    #- bootstrapper_disk_layout
+    - bootstrapper_disk_layout
+    - bootstrapper_zectl
+    - bootstrapper_etckeeper
     - bootstrapper_restic
     - bootstrapper_arch
-    - bootstrapper_arch_zfs
-    - bootstrapper_refind
+    - bootstrapper_zfs_cache_file
+    - bootstrapper_systemd_boot
+    - mark_bootstrapped_and_reboot
 
-  pre_tasks:
-    - name: Kill all gpg agents so target could be unmounted
-      ignore_errors: yes
-      command: pkill -2 gpg-agent
-    - name: Getting mounted filesystems
-      slurp:
-        src: /proc/mounts
-      register: mounted_slurp
-    - name: Parsing mounted filesystems
-      set_fact:
-        mounted: "{{ mounted | default([]) + [ dict(
-                  [ 'src', 'path', 'fstype', 'opts', 'dump', 'passno' ]
-                  | zip( item.split(' ') )
-                  )] }}"
-      when: '"target" in item'
-      loop: "{{ ( mounted_slurp.content | b64decode).split('\n')
-                | map('regex_replace', '\t', ' ')
-                | map('regex_replace', ' +', ' ')
-                | list }}"
-    - name: Unmounting filesystems previously not mounted
-      command:
-        warn: no
-        argv:
-          - umount
-          - "{{ item.path }}"
-      when: item.fstype != "zfs"
-      loop: "{{ mounted[::-1] | default ([])}}"
-#    - name: destroy zpool
-#      ignore_errors: yes
-#      command: zpool destroy hot
-#    - name: Wipe al partition signatures
-#      ignore_errors: yes
-#      shell: "wipefs -a /dev/nvme?n1p?"
-#    - name: wipe all disk signature
-#      ignore_errors: yes
-#      shell: "wipefs -a /dev/nvme?n1"
-#    - name: Destroy everything on target folder (should be empty)
-#      shell:
-#        cmd: rm -rf /target
-#        warn: no
 
 # - name: Installing ubuntu systems
 #   hosts: ubuntu
