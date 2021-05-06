@@ -1,6 +1,3 @@
-.venv
 venv
-.vscode
-
-/roles
-!/roles/role_requirements.yaml
+roles/*
+!roles/role_requirements.yaml
